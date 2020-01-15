@@ -35,23 +35,15 @@ class MultiAttentionLayer(torch.nn.Module):
         k_ = self.key(k).view(k.size(0), -1, self.num_head, self.num_hidden).transpose(1, 2)
         v_ = self.value(v).view(v.size(0), -1, self.num_head, self.num_hidden).transpose(1, 2)
 
-        qk = torch.matmul(q_, k_.transpose(-1, -2)) / np.sqrt(self.num_hidden)
-        # qk = torch.einsum('bhix,bhjx->bhij', [q_, k_]) / np.sqrt(self.num_hidden)
-        # qk = qk.view(-1, q_.size(2), k_.size(2))
+        qk = torch.einsum('bhix,bhjx->bhij', [q_, k_]) / np.sqrt(self.num_hidden)
 
         if isMasked:
             mask = torch.tril(torch.ones(q_.size(2), k_.size(2)).cuda()).view(1, 1, q_.size(2), k_.size(2))
             mask = mask.repeat(qk.size(0), qk.size(1), 1, 1)
-            # print(qk.size(), mask.size())
             qk = qk.masked_fill_(mask == 0, -1e9)
         attn = torch.nn.Softmax(dim=-1)(qk)
-        # attn = attn.view(-1, self.num_head, q_.size(2), k_.size(2))
 
-        # outs = torch.einsum('bhik,bhkj->bhij', [attn, v_])
-        # print(attn.size(), v_.size())
-        outs = torch.matmul(attn, v_)
-        outs = outs.transpose(1, 2)
-        # print(outs.size())
+        outs = torch.einsum('bhik,bhkj->bihj', [attn, v_])
         outs = outs.contiguous().view(outs.size(0), outs.size(1), self.num_hidden * self.num_head)
 
         outs = self.match_dim(outs)
@@ -61,24 +53,26 @@ class MultiAttentionLayer(torch.nn.Module):
 
 
 class FeedForwardNetwork(torch.nn.Module):
-    def __init__(self, embedding_size, d_ff, k=1, padding=0):
+    def __init__(self, embedding_size, k, d_ff, padding=0):
         super(FeedForwardNetwork, self).__init__()
+        if k > 1:
+            padding = 1
         self.embedding_size = embedding_size
         self.conv1 = torch.nn.Conv1d(in_channels=embedding_size, out_channels=d_ff, kernel_size=k, padding=padding)
         self.conv2 = torch.nn.Conv1d(in_channels=d_ff, out_channels=embedding_size, kernel_size=k, padding=padding)
 
     def forward(self, x):
         x_ = self.conv2(torch.nn.ReLU()(self.conv1(x.transpose(-1, -2)))).transpose(-1, -2)
-        # x_ = torch.nn.Dropout(0.1)(x_)
+        x_ = torch.nn.Dropout(0.1)(x_)
         x = torch.nn.LayerNorm(self.embedding_size).cuda()(x_ + x)
         return x
 
 
 class EncoderBlock(torch.nn.Module):
-    def __init__(self, embedding_size, num_hidden, num_enc_head):
+    def __init__(self, embedding_size, num_hidden, num_enc_head, kernel_size):
         super(EncoderBlock, self).__init__()
         self.encoder_attn_layer = MultiAttentionLayer(embedding_size, embedding_size, num_hidden, num_enc_head)
-        self.encoder_ffn_layer = FeedForwardNetwork(embedding_size, d_ff=2048)
+        self.encoder_ffn_layer = FeedForwardNetwork(embedding_size, kernel_size, d_ff=2048)
 
     def forward(self, word):
         word, enc_self_attn = self.encoder_attn_layer.forward(word, word, word, False)
@@ -87,7 +81,7 @@ class EncoderBlock(torch.nn.Module):
 
 
 class Encoder(torch.nn.Module):
-    def __init__(self, src_vocab_size, embedding_size, num_hidden, num_enc_head, num_block):
+    def __init__(self, src_vocab_size, embedding_size, num_hidden, num_enc_head, num_block, kernel_size):
         super(Encoder, self).__init__()
         self.embedding_size = embedding_size
         self.num_hidden = num_hidden
@@ -95,7 +89,7 @@ class Encoder(torch.nn.Module):
 
         self.src_embedding_layer = torch.nn.Embedding(src_vocab_size, embedding_size)
         self.encoder_blocks = torch.nn.ModuleList([
-            EncoderBlock(embedding_size, num_hidden, num_enc_head) for _ in range(num_block)
+            EncoderBlock(embedding_size, num_hidden, num_enc_head, kernel_size) for _ in range(num_block)
         ])
 
     def forward(self, src_batch):
@@ -103,18 +97,18 @@ class Encoder(torch.nn.Module):
         Positional Embedding
         """
         src_embedding = self.src_embedding_layer(src_batch)
-        # pos_embedding = positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden)
-        # pos_embedding = pos_embedding.unsqueeze(0).repeat(src_batch.size(0), 1, 1)
-        self.pos_embedding_layer = torch.nn.Embedding.from_pretrained(
-            positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden), freeze=True)
-        pos_embedding = self.pos_embedding_layer(torch.cuda.LongTensor([np.arange(src_batch.size(1))]))
+        pos_embedding = positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden)
+        pos_embedding = pos_embedding.unsqueeze(0).repeat(src_batch.size(0), 1, 1)
+        # self.pos_embedding_layer = torch.nn.Embedding.from_pretrained(
+        #     positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden), freeze=True)
+        # pos_embedding = self.pos_embedding_layer(torch.cuda.LongTensor([np.arange(src_batch.size(1))]))
+        # pos_embedding = pos_embedding.repeat(src_embedding.size(0), 1, 1)
         # print(src_embedding.size(), pos_embedding.size())
 
         """
         Encoder Self-Attention Blocks and FFN
         """
-        word = src_embedding + pos_embedding.repeat(src_embedding.size(0), 1, 1)
-        word = src_embedding
+        word = src_embedding + pos_embedding
         enc_self_attns = []
         for encoder_block in self.encoder_blocks:
             word, enc_self_attn = encoder_block(word)
@@ -123,11 +117,11 @@ class Encoder(torch.nn.Module):
 
 
 class DecoderBlock(torch.nn.Module):
-    def __init__(self, embedding_size, num_hidden, num_dec_head, num_enc_dec_head):
+    def __init__(self, embedding_size, num_hidden, num_dec_head, num_enc_dec_head, kernel_size):
         super(DecoderBlock, self).__init__()
         self.decoder_attn_layer = MultiAttentionLayer(embedding_size, embedding_size, num_hidden, num_dec_head)
         self.enc_dec_attn_layer = MultiAttentionLayer(embedding_size, embedding_size, num_hidden, num_enc_dec_head)
-        self.decoder_ffn_layer = FeedForwardNetwork(embedding_size, d_ff=2048)
+        self.decoder_ffn_layer = FeedForwardNetwork(embedding_size, kernel_size, d_ff=2048)
 
     def forward(self, src_hidden, word):
         word, dec_self_attn = self.decoder_attn_layer.forward(word, word, word, True)
@@ -137,7 +131,7 @@ class DecoderBlock(torch.nn.Module):
 
 
 class Decoder(torch.nn.Module):
-    def __init__(self, tgt_vocab_size, embedding_size, num_hidden, num_enc_dec_head, num_dec_head, num_block):
+    def __init__(self, tgt_vocab_size, embedding_size, num_hidden, num_enc_dec_head, num_dec_head, num_block, kernel_size):
         super(Decoder, self).__init__()
         self.embedding_size = embedding_size
         self.num_hidden = num_hidden
@@ -145,7 +139,7 @@ class Decoder(torch.nn.Module):
 
         self.tgt_embedding_layer = torch.nn.Embedding(tgt_vocab_size, embedding_size)
         self.decoder_blocks = torch.nn.ModuleList([
-            DecoderBlock(embedding_size, num_hidden, num_dec_head, num_enc_dec_head) for _ in range(num_block)
+            DecoderBlock(embedding_size, num_hidden, num_dec_head, num_enc_dec_head, kernel_size) for _ in range(num_block)
         ])
 
     def forward(self, src_hidden, trt_batch):
@@ -153,19 +147,13 @@ class Decoder(torch.nn.Module):
         Positional Embedding
         """
         tgt_embedding = self.tgt_embedding_layer(trt_batch)
-        # pos_embedding = positional_encoding(trt_batch.size(1), self.embedding_size, self.num_hidden)
-        # pos_embedding = pos_embedding.unsqueeze(0).repeat(trt_batch.size(0), 1, 1)
-        self.pos_embedding_layer = torch.nn.Embedding.from_pretrained(
-            positional_encoding(trt_batch.size(1), self.embedding_size, self.num_hidden), freeze=True)
-        pos_embedding = self.pos_embedding_layer(torch.cuda.LongTensor([np.arange(trt_batch.size(1))]))
-        # print(tgt_embedding.size(), pos_embedding.size())
-
+        pos_embedding = positional_encoding(trt_batch.size(1), self.embedding_size, self.num_hidden)
+        pos_embedding = pos_embedding.unsqueeze(0).repeat(trt_batch.size(0), 1, 1)
 
         """
         Encoder-Decoder, Decoder Self-Attention Blocks and FFN
         """
-        word = tgt_embedding + pos_embedding.repeat(tgt_embedding.size(0), 1, 1)
-        word = tgt_embedding
+        word = tgt_embedding + pos_embedding
         enc_dec_attns = []
         dec_self_attns = []
         for decoder_block in self.decoder_blocks:
@@ -176,15 +164,16 @@ class Decoder(torch.nn.Module):
 
 
 class Transformer(torch.nn.Module):
-    def __init__(self, src_vocab_size, tgt_vocab_size, embedding_size=512, num_hidden=64, num_head=8, num_block=6):
+    def __init__(self, src_vocab_size, tgt_vocab_size, kernel_size, embedding_size=512, num_hidden=64, num_head=8, num_block=6):
         super(Transformer, self).__init__()
-        self.encoder = Encoder(src_vocab_size, embedding_size, num_hidden, num_head, num_block)
-        self.decoder = Decoder(tgt_vocab_size, embedding_size, num_hidden, num_head, num_head, num_block)
+        self.encoder = Encoder(src_vocab_size, embedding_size, num_hidden, num_head, num_block, kernel_size)
+        self.decoder = Decoder(tgt_vocab_size, embedding_size, num_hidden, num_head, num_head, num_block, kernel_size)
 
         self.embedding_back = torch.nn.Linear(embedding_size, tgt_vocab_size, bias=False)
 
     def forward(self, src_batch, trt_batch):
         src_hidden, enc_self_attns = self.encoder.forward(src_batch)
         y_predict, dec_self_attns, enc_dec_attns = self.decoder.forward(src_hidden, trt_batch)
-        prob = torch.nn.Softmax(dim=-1)(self.embedding_back(y_predict))
+        # prob = torch.nn.Softmax(dim=-1)(self.embedding_back(y_predict))
+        prob = self.embedding_back(y_predict)
         return prob.view(-1, prob.size(-1))
