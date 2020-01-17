@@ -47,22 +47,31 @@ class MultiAttentionLayer(torch.nn.Module):
         outs = outs.contiguous().view(outs.size(0), outs.size(1), self.num_hidden * self.num_head)
 
         outs = self.match_dim(outs)
+        outs = torch.nn.Dropout(0.1)(outs)
         outs = torch.nn.LayerNorm(self.embedding_size).cuda()(outs + q)
 
         return outs, attn
 
 
 class FeedForwardNetwork(torch.nn.Module):
-    def __init__(self, embedding_size, k, d_ff, padding=0):
+    def __init__(self, embedding_size, k, d_ff):
         super(FeedForwardNetwork, self).__init__()
-        if k > 1:
-            padding = 1
         self.embedding_size = embedding_size
-        self.conv1 = torch.nn.Conv1d(in_channels=embedding_size, out_channels=d_ff, kernel_size=k, padding=padding)
-        self.conv2 = torch.nn.Conv1d(in_channels=d_ff, out_channels=embedding_size, kernel_size=k, padding=padding)
+        self.k = k
+        self.conv1 = torch.nn.Conv1d(in_channels=embedding_size, out_channels=d_ff, kernel_size=k)
+        self.conv2 = torch.nn.Conv1d(in_channels=d_ff, out_channels=embedding_size, kernel_size=k)
 
     def forward(self, x):
-        x_ = self.conv2(torch.nn.ReLU()(self.conv1(x.transpose(-1, -2)))).transpose(-1, -2)
+        if self.k > 1:
+            x_ = x.transpose(-1, -2)
+            pad_x_ = torch.nn.functional.pad(x_, (self.k-1, 0, 0, 0, 0, 0), mode='constant', value=0)
+            x_ = torch.nn.ReLU()(self.conv1(pad_x_))
+
+            pad_x_ = torch.nn.functional.pad(x_, (self.k-1, 0, 0, 0, 0, 0), mode='constant', value=0)
+            x_ = self.conv2(pad_x_).transpose(-1, -2)
+        else:
+            x_ = self.conv2(torch.nn.ReLU()(self.conv1(x.transpose(-1, -2)))).transpose(-1, -2)
+
         x_ = torch.nn.Dropout(0.1)(x_)
         x = torch.nn.LayerNorm(self.embedding_size).cuda()(x_ + x)
         return x
@@ -99,11 +108,6 @@ class Encoder(torch.nn.Module):
         src_embedding = self.src_embedding_layer(src_batch)
         pos_embedding = positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden)
         pos_embedding = pos_embedding.unsqueeze(0).repeat(src_batch.size(0), 1, 1)
-        # self.pos_embedding_layer = torch.nn.Embedding.from_pretrained(
-        #     positional_encoding(src_batch.size(1), self.embedding_size, self.num_hidden), freeze=True)
-        # pos_embedding = self.pos_embedding_layer(torch.cuda.LongTensor([np.arange(src_batch.size(1))]))
-        # pos_embedding = pos_embedding.repeat(src_embedding.size(0), 1, 1)
-        # print(src_embedding.size(), pos_embedding.size())
 
         """
         Encoder Self-Attention Blocks and FFN

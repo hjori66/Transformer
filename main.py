@@ -5,7 +5,7 @@ import torch
 
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
-from utils import seq2sen, plot_Syn
+from utils import seq2sen, plot_loss
 from Transformer import Transformer
 from torch.autograd import Variable
 from tqdm import tqdm
@@ -98,7 +98,7 @@ def main(args):
                 print('validation:: Epoch:', '%04d' % (epoch + 1), 'cost =', '{:.6f}'.format(total_valid_loss / (i+1)))
                 valid_losses.append(total_valid_loss / (i + 1))
 
-        plot_Syn(train_losses, valid_losses, args.epochs, args.saved_plot_path)
+        plot_loss(train_losses, valid_losses, args.epochs, args.saved_plot_path)
         if int(args.save_model) == 1:
             torch.save(model, args.saved_path)
     else:
@@ -159,16 +159,15 @@ if __name__ == '__main__':
     parser.add_argument(
         '--epochs',
         type=int,
-        default=100)
+        default=10)
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128)
+        default=64)
 
     parser.add_argument(
         '--test',
-        default=0)
-        # action='store_true')
+        default=1)
 
     parser.add_argument(
         '--save_model',
@@ -176,23 +175,23 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--use_saved_model',
-        default=0)
+        default=1)
 
     parser.add_argument(
         '--saved_path',
-        default='results/model_k1.pkl')
+        default='results/model.pkl')
 
     parser.add_argument(
         '--saved_plot_path',
-        default='results/plot_k1.png')
+        default='results/plot.png')
 
     parser.add_argument(
         '--saved_pred_path',
-        default='results/pred_k1.txt')
+        default='results/pred.txt')
 
     parser.add_argument(
         '--kernel_size',
-        default=1)
+        default=3)
     args = parser.parse_args()
 
     main(args)

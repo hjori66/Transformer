@@ -2,6 +2,7 @@ import random
 import torch
 import matplotlib.pylab as plt
 
+
 def seq2sen(batch, vocab):
     sen_list = []
 
@@ -11,6 +12,7 @@ def seq2sen(batch, vocab):
         sen_list.append(sen)
 
     return sen_list
+
 
 def shuffle_list(src, tgt):
     index = list(range(len(src)))
@@ -25,7 +27,8 @@ def shuffle_list(src, tgt):
 
     return shuffle_src, shuffle_tgt
 
-def plot_Syn(train_loss, valid_loss, epochs, saved_plot_path):
+
+def plot_loss(train_loss, valid_loss, epochs, saved_plot_path):
     plt.figure(figsize=(18, 6))
     plt.title('transformer, multi30k on {} epochs'.format(epochs))
     plt.subplot(1, 2, 1).get_xaxis().set_visible(False)
