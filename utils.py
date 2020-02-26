@@ -1,5 +1,6 @@
 import random
 import torch
+import numpy as np
 import matplotlib.pylab as plt
 
 
@@ -40,3 +41,11 @@ def plot_loss(train_loss, valid_loss, epochs, saved_plot_path):
     plt.tick_params(axis='y', labelsize=14)
 
     plt.savefig(saved_plot_path)
+
+
+def fix_seed(seed=0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
