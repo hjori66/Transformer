@@ -15,6 +15,9 @@ from RepeatlyPreprocessing import repeat_input_words
 
 
 def main(args):
+    """
+    Reference :: https://github.com/eagle705/pytorch-transformer-chatbot
+    """
     src, tgt = load_data(args.path)
 
     src_vocab = Vocab(init_token='<sos>', eos_token='<eos>', pad_token='<pad>', unk_token='<unk>')
@@ -123,7 +126,12 @@ def main(args):
         valid_loader = get_loader(src['valid'], tgt['valid'], src_vocab, tgt_vocab, batch_size=args.batch_size)
 
         loss_fn = torch.nn.CrossEntropyLoss(ignore_index=pad_idx)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+        if args.optim == 'Adam':
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        elif args.optim == 'AdamW':
+            optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         """
         train
@@ -145,8 +153,12 @@ def main(args):
                 tgt_batch = Variable(torch.LongTensor(tgt_batch).to(device)[:, :-1])
 
                 """
-                Embedding
+                Embedding & Masking
                 """
+                src_key_padding_mask = repeated_src_batch == pad_idx
+                tgt_key_padding_mask = tgt_batch == pad_idx
+                memory_key_padding_mask = src_key_padding_mask
+
                 repeated_src_batch = src_embedding.forward(repeated_src_batch)
                 tgt_batch = tgt_embedding.forward(tgt_batch)
 
@@ -161,7 +173,12 @@ def main(args):
                 optimizer.zero_grad()
 
                 if use_nn:
-                    repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch, tgt_mask=tgt_mask)
+                    repeated_tgt_pred = model.forward(repeated_src_batch,
+                                                      tgt_batch,
+                                                      tgt_mask=tgt_mask,
+                                                      src_key_padding_mask=src_key_padding_mask,
+                                                      tgt_key_padding_mask=tgt_key_padding_mask,
+                                                      memory_key_padding_mask=memory_key_padding_mask)
                     repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                 else:
                     repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
@@ -174,7 +191,7 @@ def main(args):
 
                 total_train_loss += loss.item()
                 running_loss += loss.item()
-                if i % 10 == 9:  # print every 10 mini-batches
+                if (i + 1) % 10 == 0:  # print every 100 mini-batches
                     print('[%d, %5d] loss: %.3f' %
                           (epoch + 1, i + 1, running_loss / 10))
                     running_loss = 0.0
@@ -201,8 +218,12 @@ def main(args):
                     next_tgt_batch = torch.autograd.Variable(torch.LongTensor(next_tgt_batch).to(device))
 
                     """
-                    Embedding
+                    Embedding & Masking
                     """
+                    src_key_padding_mask = repeated_src_batch == pad_idx
+                    tgt_key_padding_mask = tgt_batch == pad_idx
+                    memory_key_padding_mask = src_key_padding_mask
+
                     repeated_src_batch = src_embedding.forward(repeated_src_batch)
                     tgt_batch = tgt_embedding.forward(tgt_batch)
 
@@ -214,7 +235,12 @@ def main(args):
                         # tgt_mask = torch.triu(torch.ones((tgt_batch.size(0), tgt_batch.size(0))), 1).to(device)
                         tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
 
-                        repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch, tgt_mask=tgt_mask)
+                        repeated_tgt_pred = model.forward(repeated_src_batch,
+                                                          tgt_batch,
+                                                          tgt_mask=tgt_mask,
+                                                          src_key_padding_mask=src_key_padding_mask,
+                                                          tgt_key_padding_mask=tgt_key_padding_mask,
+                                                          memory_key_padding_mask=memory_key_padding_mask)
                         repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                     else:
                         repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
@@ -251,6 +277,10 @@ def main(args):
                 repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, -1, repeat_range)[0]).to(device))
 
                 batch_size = repeated_src_batch.size(0)
+
+                src_key_padding_mask = repeated_src_batch == pad_idx
+                memory_key_padding_mask = src_key_padding_mask
+
                 repeated_src_batch = src_embedding.forward(repeated_src_batch)
                 if use_nn:
                     repeated_src_batch = repeated_src_batch.transpose(0, 1)
@@ -259,13 +289,19 @@ def main(args):
                 inf_batch = Variable(torch.LongTensor(inf_list).to(device))
                 eos_checker = np.ones(batch_size)
                 for i in range(max_length):
+                    tgt_key_padding_mask = (inf_batch[:, :i+1] == pad_idx)
                     inf_batch_ = tgt_embedding.forward(inf_batch[:, :i+1])
                     if use_nn:
                         inf_batch_ = inf_batch_.transpose(0, 1)
                         # tgt_mask = torch.tril(torch.ones((inf_batch_.size(0), inf_batch_.size(0)))).to(device)
                         # tgt_mask = torch.triu(torch.ones((inf_batch_.size(0), inf_batch_.size(0))), 1).to(device)
                         tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, inf_batch_.size(0)).to(device)
-                        pred_batch = model.forward(repeated_src_batch, inf_batch_, tgt_mask=tgt_mask)
+                        pred_batch = model.forward(repeated_src_batch,
+                                                   inf_batch_,
+                                                   tgt_mask=tgt_mask,
+                                                   src_key_padding_mask=src_key_padding_mask,
+                                                   tgt_key_padding_mask=tgt_key_padding_mask,
+                                                   memory_key_padding_mask=memory_key_padding_mask)
                         pred_batch = pred_batch.transpose(0, 1)
                     else:
                         pred_batch = model.forward(repeated_src_batch, inf_batch_)
@@ -311,7 +347,17 @@ if __name__ == '__main__':
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=64)
+        default=128)
+
+    parser.add_argument(
+        '--optim',
+        type=str,
+        default='Adam')
+
+    parser.add_argument(
+        '--lr',
+        type=float,
+        default=1e-4)
 
     parser.add_argument(
         '--model_name',
@@ -325,7 +371,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--training',
         type=bool,
-        default=True)
+        default=False)
 
     parser.add_argument(
         '--training_helper',
