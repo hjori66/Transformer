@@ -14,18 +14,15 @@ Idea: Make NMT tasks with modified inputs like ASR inputs (randomly repeated wor
 """
 
 
-def repeat_word(seq, num_repeat_words):
+def repeat_word(seq, num_repeat_words, repeat_range):
     new_seq = []
     if num_repeat_words is None:
         num_repeat_words = []
         for word in seq:
-            # fix_repeated_model :: num = np.random.randint(8)+1
-            # fix_repeated_model2 :: num = np.random.randint(4)+1
-            # fix_repeated_model3:: num = np.random.randint(2)+1
-            # fix_repeated_model4 :: num = np.random.randint(1)+1
-            # fix_repeated_model12 :: num = np.random.randint(12)+1
-            # model_k1, model_k3 :: num = 1
-            num = 1
+            if repeat_range > 0:
+                num = np.random.randint(repeat_range)+1
+            else:
+                num = 1
             num_repeat_words.append(num)
             for _ in range(num):
                 new_seq.append(word)
@@ -44,7 +41,7 @@ def repeat_word(seq, num_repeat_words):
     return new_seq, len(new_seq), num_repeat_words
 
 
-def repeat_input_words(src_batch, num_repeat_words):
+def repeat_input_words(src_batch, num_repeat_words, repeat_range):
     # Do preprocessing #1
     if num_repeat_words == -1:
         num_repeat_words = None
@@ -55,9 +52,9 @@ def repeat_input_words(src_batch, num_repeat_words):
         seq.append(2)
         seq_strip = seq[:seq.index(2)]
         if num_repeat_words is None:
-            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words)
+            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words, repeat_range)
         else:
-            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words[i])
+            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words[i], repeat_range)
         new_seqs.append(new_seq)
         num_repeat_words_list.append(num_repeat_word)
         if max_len < new_len:

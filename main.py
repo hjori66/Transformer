@@ -8,7 +8,7 @@ import pickle
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
 from utils import seq2sen, plot_loss, fix_seed
-from Transformer import Transformer, PositionalEmbedding, EmbeddingBack
+from Transformer import Transformer, Encoder, Decoder, PositionalEmbedding, EmbeddingBack
 from torch.autograd import Variable
 from tqdm import tqdm
 from RepeatlyPreprocessing import repeat_input_words
@@ -27,22 +27,27 @@ def main(args):
     """
     Use these information.
     """
+    kernel_size = args.kernel_size
+    embedding_size = 512
+    num_hidden = 64
+    num_head = 8
+    num_block = 6
+
     sos_idx = 0
     eos_idx = 1
     pad_idx = 2
     max_length = 50
-
-    embedding_size = 512
-    num_hidden = 64
 
     """
     Use these values to construct embedding layers
     """
     src_vocab_size = len(src_vocab)
     tgt_vocab_size = len(tgt_vocab)
+
     src_embedding = PositionalEmbedding(src_vocab_size, embedding_size, num_hidden)
     tgt_embedding = PositionalEmbedding(tgt_vocab_size, embedding_size, num_hidden)
     embedding_back = EmbeddingBack(embedding_size, tgt_vocab_size)
+
     src_embedding.to(device)
     tgt_embedding.to(device)
     embedding_back.to(device)
@@ -51,30 +56,61 @@ def main(args):
     Make the model
     """
     use_nn = args.using_nn_transformer
-    model = Transformer(kernel_size=args.kernel_size, embedding_size=embedding_size, num_hidden=num_hidden)
+    if args.nn_helper == 1:
+        use_nn = True
+    elif args.nn_helper == 0:
+        use_nn = False
+
     if use_nn:
         model = nn.Transformer()
+    else:
+        # custom_encoder = Encoder(embedding_size, num_hidden, num_head, num_block, kernel_size)
+        # custom_decoder = Decoder(embedding_size, num_hidden, num_head, num_head, num_block, kernel_size)
+        # model = nn.Transformer(custom_encoder=custom_encoder, custom_decoder=custom_decoder)
+        model = Transformer(kernel_size, embedding_size, num_hidden, num_head, num_block)
     model.to(device)
 
     """
     Save the Model / Path
+    Examples::
+    transformer :: repeat_range = 1
+    transformer_rpt1to4 :: repeat_range = np.random.randint(4)+1
+    nn_transformer_rpt1to8 :: use nn.transformer, repeat_range = np.random.randint(8)+1
     """
+    file_name = args.model_name
+    repeat_range = args.repeat_range
 
-    saved_path = 'results/' + args.file_name + '.pkl'
-    saved_plot_path = 'results/' + args.file_name + '.png'
-    saved_pred_path = 'results/' + args.file_name + '.txt'
+    if use_nn:
+        file_name = 'nn_' + file_name
+    if repeat_range > 0:
+        file_name = file_name + '_rpt1to' + str(repeat_range)
+
+    saved_path = 'results/' + file_name + '.pkl'
+    src_embedding_saved_path = 'results/' + file_name + '_src_emb.pkl'
+    tgt_embedding_saved_path = 'results/' + file_name + '_tgt_emb.pkl'
+    embedding_back_saved_path = 'results/' + file_name + '_emb_back.pkl'
+    saved_plot_path = 'results/' + file_name + '.png'
+    saved_pred_path = 'results/' + file_name + '.txt'
+
+    print("file_name :: " + file_name)
 
     training = args.training
+    if args.training_helper == 1:
+        training = True
+    elif args.training_helper == 0:
+        training = False
     save_model = training
     resume = not training
     # save_model = args.save_model
     # resume = args.resume
 
-    num_repeat_words = -1
     fix_seed()
 
     if resume:
         model = torch.load(saved_path)
+        src_embedding = torch.load(src_embedding_saved_path)
+        tgt_embedding = torch.load(tgt_embedding_saved_path)
+        embedding_back = torch.load(embedding_back_saved_path)
 
     if training:
         train_losses = []
@@ -97,16 +133,15 @@ def main(args):
             total_train_loss = 0
             for i, (src_batch, tgt_batch) in enumerate(train_loader):
                 if epoch == 0:
-                    repeated_src_batch_, num_repeat_word = repeat_input_words(src_batch, num_repeat_words)
+                    repeated_src_batch_, num_repeat_word = repeat_input_words(src_batch, -1, repeat_range)
                     repeated_src_batch = Variable(torch.LongTensor(repeated_src_batch_).to(device))
                     with open('repeated_data/' + str(i) + 'th_train.pkl', 'wb') as f:
                         pickle.dump(num_repeat_word, f)
                 else:
                     with open('repeated_data/' + str(i) + 'th_train.pkl', 'rb') as f:
                         words = pickle.load(f)
-                        repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, words)[0]).to(device))
+                        repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, words, repeat_range)[0]).to(device))
                 next_tgt_batch = Variable(torch.LongTensor(tgt_batch).to(device)[:, 1:])
-                # src_batch = Variable(torch.LongTensor(src_batch).to(device))
                 tgt_batch = Variable(torch.LongTensor(tgt_batch).to(device)[:, :-1])
 
                 """
@@ -119,13 +154,17 @@ def main(args):
                     repeated_src_batch = repeated_src_batch.transpose(0, 1)
                     tgt_batch = tgt_batch.transpose(0, 1)
 
+                    # tgt_mask = torch.tril(torch.ones((tgt_batch.size(0), tgt_batch.size(0)))).to(device)
+                    # tgt_mask = torch.triu(torch.ones((tgt_batch.size(0), tgt_batch.size(0))), 1).to(device)
+                    tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
+
                 optimizer.zero_grad()
-                # tgt_pred = model.forward(src_batch, tgt_batch)
-                # tgt_pred = embedding_back.forward(tgt_pred)
-                repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
 
                 if use_nn:
+                    repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch, tgt_mask=tgt_mask)
                     repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
+                else:
+                    repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
 
                 repeated_tgt_pred = embedding_back.forward(repeated_tgt_pred)
 
@@ -149,16 +188,15 @@ def main(args):
                 total_valid_loss = 0
                 for i, (src_batch, tgt_batch) in enumerate(valid_loader):
                     if epoch == 0:
-                        repeated_src_batch_, num_repeat_word = repeat_input_words(src_batch, num_repeat_words)
+                        repeated_src_batch_, num_repeat_word = repeat_input_words(src_batch, -1, repeat_range)
                         repeated_src_batch = Variable(torch.LongTensor(repeated_src_batch_).to(device))
                         with open('repeated_data/' + str(i) + 'th_val.pkl', 'wb') as f:
                             pickle.dump(num_repeat_word, f)
                     else:
                         with open('repeated_data/' + str(i) + 'th_val.pkl', 'rb') as f:
                             words = pickle.load(f)
-                            repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, words)[0]).to(device))
+                            repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, words, repeat_range)[0]).to(device))
                     next_tgt_batch = [tgt[1:] + [pad_idx] for tgt in tgt_batch]
-                    # src_batch = torch.autograd.Variable(torch.LongTensor(src_batch).to(device))
                     tgt_batch = torch.autograd.Variable(torch.LongTensor(tgt_batch).to(device))
                     next_tgt_batch = torch.autograd.Variable(torch.LongTensor(next_tgt_batch).to(device))
 
@@ -172,12 +210,14 @@ def main(args):
                         repeated_src_batch = repeated_src_batch.transpose(0, 1)
                         tgt_batch = tgt_batch.transpose(0, 1)
 
-                    # tgt_pred = model.forward(src_batch, tgt_batch)
-                    # tgt_pred = embedding_back.forward(tgt_pred)
-                    repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
+                        # tgt_mask = torch.tril(torch.ones((tgt_batch.size(0), tgt_batch.size(0)))).to(device)
+                        # tgt_mask = torch.triu(torch.ones((tgt_batch.size(0), tgt_batch.size(0))), 1).to(device)
+                        tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
 
-                    if use_nn:
+                        repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch, tgt_mask=tgt_mask)
                         repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
+                    else:
+                        repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
 
                     repeated_tgt_pred = embedding_back.forward(repeated_tgt_pred)
                     loss = loss_fn(repeated_tgt_pred, next_tgt_batch.contiguous().view(-1))
@@ -188,6 +228,10 @@ def main(args):
             plot_loss(train_losses, valid_losses, args.epochs, saved_plot_path)
             if save_model:
                 torch.save(model, saved_path)
+                torch.save(src_embedding, src_embedding_saved_path)
+                torch.save(tgt_embedding, tgt_embedding_saved_path)
+                torch.save(embedding_back, embedding_back_saved_path)
+
     else:
         """
         test
@@ -204,9 +248,9 @@ def main(args):
                 predict pred_batch from src_batch with your model.
                 """
                 # repeated_src_batch = Variable(torch.LongTensor(src_batch).to(device))
-                repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, num_repeat_words)[0]).to(device))
-                batch_size = repeated_src_batch.size(0)
+                repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, -1, repeat_range)[0]).to(device))
 
+                batch_size = repeated_src_batch.size(0)
                 repeated_src_batch = src_embedding.forward(repeated_src_batch)
                 if use_nn:
                     repeated_src_batch = repeated_src_batch.transpose(0, 1)
@@ -215,12 +259,18 @@ def main(args):
                 inf_batch = Variable(torch.LongTensor(inf_list).to(device))
                 eos_checker = np.ones(batch_size)
                 for i in range(max_length):
-                    inf_batch_ = embedding_back.forward(inf_batch)
+                    inf_batch_ = tgt_embedding.forward(inf_batch[:, :i+1])
                     if use_nn:
                         inf_batch_ = inf_batch_.transpose(0, 1)
-                    pred_batch = model(src_embedding.forward(repeated_src_batch), inf_batch_)
-                    if use_nn:
+                        # tgt_mask = torch.tril(torch.ones((inf_batch_.size(0), inf_batch_.size(0)))).to(device)
+                        # tgt_mask = torch.triu(torch.ones((inf_batch_.size(0), inf_batch_.size(0))), 1).to(device)
+                        tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, inf_batch_.size(0)).to(device)
+                        pred_batch = model.forward(repeated_src_batch, inf_batch_, tgt_mask=tgt_mask)
                         pred_batch = pred_batch.transpose(0, 1)
+                    else:
+                        pred_batch = model.forward(repeated_src_batch, inf_batch_)
+
+                    pred_batch = embedding_back.forward(pred_batch)
                     pred_label = torch.max(pred_batch, 1)[1].view(batch_size, -1)
                     for j, label in enumerate(pred_label[:, i]):
                         if eos_checker[j] == 2:
@@ -264,37 +314,38 @@ if __name__ == '__main__':
         default=64)
 
     parser.add_argument(
-        '--using_nn_transformer',
-        type=bool,
-        default=True)
+        '--model_name',
+        default='transformer')
 
-    # parser.add_argument(
-    #     '--num_repeat_words',
-    #     default=-1)
+    parser.add_argument(
+        '--kernel_size',
+        type=int,
+        default=1)
 
     parser.add_argument(
         '--training',
         type=bool,
         default=True)
 
-    # parser.add_argument(
-    #     '--save_model',
-    #     type=bool,
-    #     default=False)
-    #
-    # parser.add_argument(
-    #     '--resume',
-    #     type=bool,
-    #     default=True)
-
     parser.add_argument(
-        '--file_name',
-        default='nn')
-
-    parser.add_argument(
-        '--kernel_size',
+        '--training_helper',
         type=int,
-        default=1)
+        default=-1)
+
+    parser.add_argument(
+        '--using_nn_transformer',
+        type=bool,
+        default=True)
+
+    parser.add_argument(
+        '--nn_helper',
+        type=int,
+        default=-1)
+
+    parser.add_argument(
+        '--repeat_range',
+        type=int,
+        default=-1)
 
     args = parser.parse_args()
     main(args)

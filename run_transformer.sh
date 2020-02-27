@@ -1,39 +1,47 @@
-#python main.py \
-#--test=0 \
-#--save_model=1 \
-#--use_saved_model=0 \
-#--saved_path='results/model_k1.pkl' \
-#--saved_plot_path='results/plot_k1.png' \
-#--saved_pred_path='results/pred_k1.txt' \
-#--kernel_size=1
-#
-#python main.py \
-#--test=1 \
-#--save_model=0 \
-#--use_saved_model=1 \
-#--saved_path='results/model_k1.pkl' \
-#--saved_plot_path='results/plot_k1.png' \
-#--saved_pred_path='results/pred_k1.txt' \
-#--kernel_size=1
+python main.py \
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=0 \
+--repeat_range=8
 
 python main.py \
---test=0 \
---save_model=1 \
---use_saved_model=0 \
---saved_path='results/model_k3.pkl' \
---saved_plot_path='results/plot_k3.png' \
---saved_pred_path='results/pred_k3.txt' \
---kernel_size=3
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=0 \
+--repeat_range=12
+
+#python main.py \
+#--batch_size=16 \
+#--training_helper=1 \
+#--nn_helper=0 \
+#--repeat_range=16
 
 python main.py \
---test=1 \
---save_model=0 \
---use_saved_model=1 \
---saved_path='results/model_k3.pkl' \
---saved_plot_path='results/plot_k3.png' \
---saved_pred_path='results/pred_k3.txt' \
---kernel_size=3
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=1 \
+--repeat_range=2
 
+python main.py \
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=1 \
+--repeat_range=4
 
+python main.py \
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=1 \
+--repeat_range=8
 
+python main.py \
+--batch_size=32 \
+--training_helper=1 \
+--nn_helper=1 \
+--repeat_range=12
 
+#python main.py \
+#--batch_size=16 \
+#--training_helper=1 \
+#--nn_helper=1 \
+#--repeat_range=16

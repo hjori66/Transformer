@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torch.nn as nn
 
 
 class PositionalEmbedding(torch.nn.Module):
@@ -145,7 +144,8 @@ class Encoder(torch.nn.Module):
         for encoder_block in self.encoder_blocks:
             word, enc_self_attn = encoder_block(word)
             enc_self_attns.append(enc_self_attn)
-        return word, enc_self_attns
+        # return word, enc_self_attns
+        return word
 
 
 class DecoderBlock(torch.nn.Module):
@@ -184,7 +184,8 @@ class Decoder(torch.nn.Module):
             word, dec_self_attn, enc_dec_attn = decoder_block(src_hidden, word)
             dec_self_attns.append(dec_self_attn)
             enc_dec_attns.append(enc_dec_attn)
-        return word, dec_self_attns, enc_dec_attns
+        # return word, dec_self_attns, enc_dec_attns
+        return word
 
 
 class Transformer(torch.nn.Module):
@@ -194,6 +195,8 @@ class Transformer(torch.nn.Module):
         self.decoder = Decoder(embedding_size, num_hidden, num_head, num_head, num_block, kernel_size)
 
     def forward(self, src_batch, tgt_batch):
-        src_hidden, enc_self_attns = self.encoder.forward(src_batch)
-        y_predict, dec_self_attns, enc_dec_attns = self.decoder.forward(src_hidden, tgt_batch)
+        # src_hidden, enc_self_attns = self.encoder.forward(src_batch)
+        src_hidden = self.encoder.forward(src_batch)
+        # y_predict, dec_self_attns, enc_dec_attns = self.decoder.forward(src_hidden, tgt_batch)
+        y_predict = self.decoder.forward(src_hidden, tgt_batch)
         return y_predict
