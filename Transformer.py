@@ -195,4 +195,4 @@ class Transformer(torch.nn.Module):
     def forward(self, src_batch, tgt_batch):
         src_hidden, enc_self_attns = self.encoder.forward(src_batch)
         y_predict, dec_self_attns, enc_dec_attns = self.decoder.forward(src_hidden, tgt_batch)
-        return y_predict
+        return y_predict, enc_self_attns, dec_self_attns, enc_dec_attns

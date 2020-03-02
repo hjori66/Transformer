@@ -181,7 +181,7 @@ def main(args):
                                                       memory_key_padding_mask=memory_key_padding_mask)
                     repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                 else:
-                    repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
+                    repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, tgt_batch)
 
                 repeated_tgt_pred = embedding_back.forward(repeated_tgt_pred)
 
@@ -243,7 +243,7 @@ def main(args):
                                                           memory_key_padding_mask=memory_key_padding_mask)
                         repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                     else:
-                        repeated_tgt_pred = model.forward(repeated_src_batch, tgt_batch)
+                        repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, tgt_batch)
 
                     repeated_tgt_pred = embedding_back.forward(repeated_tgt_pred)
                     loss = loss_fn(repeated_tgt_pred, next_tgt_batch.contiguous().view(-1))
@@ -273,8 +273,8 @@ def main(args):
                 """
                 predict pred_batch from src_batch with your model.
                 """
-                # repeated_src_batch = Variable(torch.LongTensor(src_batch).to(device))
-                repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, -1, repeat_range)[0]).to(device))
+                repeated_src_batch = Variable(torch.LongTensor(src_batch).to(device))
+                # repeated_src_batch = Variable(torch.LongTensor(repeat_input_words(src_batch, -1, repeat_range)[0]).to(device))
 
                 batch_size = repeated_src_batch.size(0)
 
@@ -304,7 +304,7 @@ def main(args):
                                                    memory_key_padding_mask=memory_key_padding_mask)
                         pred_batch = pred_batch.transpose(0, 1)
                     else:
-                        pred_batch = model.forward(repeated_src_batch, inf_batch_)
+                        pred_batch, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, inf_batch_)
 
                     pred_batch = embedding_back.forward(pred_batch)
                     pred_label = torch.max(pred_batch, 1)[1].view(batch_size, -1)
@@ -323,7 +323,7 @@ def main(args):
                         inf_batch = inf_batch[:, :i+2]
                         break
 
-                pred += seq2sen(inf_batch.tolist(), tgt_vocab)
+                pred += seq2sen(inf_batch.tolist(), tgt_vocab, pad_idx)
 
         with open(saved_pred_path, 'w') as f:
             for line in pred:
@@ -391,7 +391,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--repeat_range',
         type=int,
-        default=-1)
+        default=4)
 
     args = parser.parse_args()
     main(args)

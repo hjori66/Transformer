@@ -2,6 +2,7 @@ import random
 import torch
 import numpy as np
 import matplotlib.pylab as plt
+import matplotlib.ticker as ticker
 
 
 def fix_seed(seed=0):
@@ -12,11 +13,14 @@ def fix_seed(seed=0):
     torch.cuda.manual_seed_all(seed)
 
 
-def seq2sen(batch, vocab):
+def seq2sen(batch, vocab, pad_idx):
     sen_list = []
 
     for seq in batch:
-        seq_strip = seq[:seq.index(1)+1]
+        if pad_idx in seq:
+            seq_strip = seq[:seq.index(pad_idx)+1]
+        else:
+            seq_strip = seq
         sen = ' '.join([vocab.itow(token) for token in seq_strip[1:-1]])
         sen_list.append(sen)
 
@@ -51,32 +55,39 @@ def plot_loss(train_loss, valid_loss, epochs, saved_plot_path):
     plt.savefig(saved_plot_path)
 
 
-# def showAttention(input_sentence, output_words, attentions):
-#     """
-#     Reference :: https://9bow.github.io/PyTorch-tutorials-kr-0.3.1/intermediate/seq2seq_translation_tutorial.html
-#     """
-#     # colorbar로 그림 설정
-#     fig = plt.figure()
-#     ax = fig.add_subplot(111)
-#     cax = ax.matshow(attentions.numpy(), cmap='bone')
-#     fig.colorbar(cax)
-#
-#     # 축 설정
-#     ax.set_xticklabels([''] + input_sentence.split(' ') +
-#                        ['<EOS>'], rotation=90)
-#     ax.set_yticklabels([''] + output_words)
-#
-#     # 매 틱마다 라벨 보여주기
-#     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-#     ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
-#
-#     plt.show()
-#
-#
+def showAttention(input_sentence, output_words, attentions, repeat_range, iters):
+    """
+    Reference :: https://9bow.github.io/PyTorch-tutorials-kr-0.3.1/intermediate/seq2seq_translation_tutorial.html
+    """
+    input_sentence = input_sentence.split(' ')
+    output_words = output_words.split(' ')
+    attentions = attentions.cpu().detach().numpy()
+    attentions = attentions[:len(input_sentence), :len(output_words)+1]
+
+    # colorbar로 그림 설정
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(attentions, cmap='bone')
+    fig.colorbar(cax)
+
+    # 축 설정
+    ax.set_xticklabels([''] + input_sentence + ['<EOS>'], rotation=90)
+    ax.set_yticklabels([''] + output_words)
+
+    # 매 틱마다 라벨 보여주기
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+
+    # plt.title('transformer, multi30k(repeat : {}) on {} th data'.format(repeat_range, iters))
+
+    plt.show()
+
+
 # def evaluateAndShowAttention(input_sentence):
 #     output_words, attentions = evaluate(
 #         encoder1, attn_decoder1, input_sentence)
 #     print('input =', input_sentence)
 #     print('output =', ' '.join(output_words))
 #     showAttention(input_sentence, output_words, attentions)
+
 
