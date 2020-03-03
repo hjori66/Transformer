@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pickle
+import nn_transformer
 
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
@@ -65,11 +66,11 @@ def main(args):
         use_nn = False
 
     if use_nn:
-        model = nn.Transformer()
+        model = nn_transformer.nnTransformer()
     else:
         # custom_encoder = Encoder(embedding_size, num_hidden, num_head, num_block, kernel_size)
         # custom_decoder = Decoder(embedding_size, num_hidden, num_head, num_head, num_block, kernel_size)
-        # model = nn.Transformer(custom_encoder=custom_encoder, custom_decoder=custom_decoder)
+        # model = nn_transformer.nnTransformer(custom_encoder=custom_encoder, custom_decoder=custom_decoder)
         model = Transformer(kernel_size, embedding_size, num_hidden, num_head, num_block)
     model.to(device)
 
@@ -168,17 +169,18 @@ def main(args):
 
                     # tgt_mask = torch.tril(torch.ones((tgt_batch.size(0), tgt_batch.size(0)))).to(device)
                     # tgt_mask = torch.triu(torch.ones((tgt_batch.size(0), tgt_batch.size(0))), 1).to(device)
-                    tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
+                    tgt_mask = nn_transformer.nnTransformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
 
                 optimizer.zero_grad()
 
                 if use_nn:
-                    repeated_tgt_pred = model.forward(repeated_src_batch,
-                                                      tgt_batch,
-                                                      tgt_mask=tgt_mask,
-                                                      src_key_padding_mask=src_key_padding_mask,
-                                                      tgt_key_padding_mask=tgt_key_padding_mask,
-                                                      memory_key_padding_mask=memory_key_padding_mask)
+                    repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(
+                        repeated_src_batch,
+                        tgt_batch,
+                        tgt_mask=tgt_mask,
+                        src_key_padding_mask=src_key_padding_mask,
+                        tgt_key_padding_mask=tgt_key_padding_mask,
+                        memory_key_padding_mask=memory_key_padding_mask)
                     repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                 else:
                     repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, tgt_batch)
@@ -233,14 +235,15 @@ def main(args):
 
                         # tgt_mask = torch.tril(torch.ones((tgt_batch.size(0), tgt_batch.size(0)))).to(device)
                         # tgt_mask = torch.triu(torch.ones((tgt_batch.size(0), tgt_batch.size(0))), 1).to(device)
-                        tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
+                        tgt_mask = nn_transformer.nnTransformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
 
-                        repeated_tgt_pred = model.forward(repeated_src_batch,
-                                                          tgt_batch,
-                                                          tgt_mask=tgt_mask,
-                                                          src_key_padding_mask=src_key_padding_mask,
-                                                          tgt_key_padding_mask=tgt_key_padding_mask,
-                                                          memory_key_padding_mask=memory_key_padding_mask)
+                        repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(
+                            repeated_src_batch,
+                            tgt_batch,
+                            tgt_mask=tgt_mask,
+                            src_key_padding_mask=src_key_padding_mask,
+                            tgt_key_padding_mask=tgt_key_padding_mask,
+                            memory_key_padding_mask=memory_key_padding_mask)
                         repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
                     else:
                         repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, tgt_batch)
@@ -295,13 +298,14 @@ def main(args):
                         inf_batch_ = inf_batch_.transpose(0, 1)
                         # tgt_mask = torch.tril(torch.ones((inf_batch_.size(0), inf_batch_.size(0)))).to(device)
                         # tgt_mask = torch.triu(torch.ones((inf_batch_.size(0), inf_batch_.size(0))), 1).to(device)
-                        tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, inf_batch_.size(0)).to(device)
-                        pred_batch = model.forward(repeated_src_batch,
-                                                   inf_batch_,
-                                                   tgt_mask=tgt_mask,
-                                                   src_key_padding_mask=src_key_padding_mask,
-                                                   tgt_key_padding_mask=tgt_key_padding_mask,
-                                                   memory_key_padding_mask=memory_key_padding_mask)
+                        tgt_mask = nn_transformer.nnTransformer.generate_square_subsequent_mask(None, inf_batch_.size(0)).to(device)
+                        pred_batch, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(
+                            repeated_src_batch,
+                            inf_batch_,
+                            tgt_mask=tgt_mask,
+                            src_key_padding_mask=src_key_padding_mask,
+                            tgt_key_padding_mask=tgt_key_padding_mask,
+                            memory_key_padding_mask=memory_key_padding_mask)
                         pred_batch = pred_batch.transpose(0, 1)
                     else:
                         pred_batch, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, inf_batch_)
@@ -347,7 +351,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128)
+        default=32)
 
     parser.add_argument(
         '--optim',
@@ -361,7 +365,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--model_name',
-        default='transformer')
+        default='transformer_test')
 
     parser.add_argument(
         '--kernel_size',
@@ -371,7 +375,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--training',
         type=bool,
-        default=False)
+        default=True)
 
     parser.add_argument(
         '--training_helper',

@@ -6,6 +6,7 @@ import torch.nn as nn
 import pickle
 import matplotlib.pylab as plt
 import viz
+import nn_transformer
 
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
@@ -95,15 +96,16 @@ def main(args):
             if use_nn:
                 repeated_src_batch = repeated_src_batch.transpose(0, 1)
                 tgt_batch = tgt_batch.transpose(0, 1)
-                tgt_mask = nn.Transformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
-                repeated_tgt_pred = model.forward(repeated_src_batch,
-                                                  tgt_batch_,
-                                                  tgt_mask=tgt_mask,
-                                                  src_key_padding_mask=src_key_padding_mask,
-                                                  tgt_key_padding_mask=tgt_key_padding_mask,
-                                                  memory_key_padding_mask=memory_key_padding_mask)
+                tgt_mask = nn_transformer.nnTransformer.generate_square_subsequent_mask(None, tgt_batch.size(0)).to(device)
+                repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(
+                    repeated_src_batch,
+                    tgt_batch_,
+                    tgt_mask=tgt_mask,
+                    src_key_padding_mask=src_key_padding_mask,
+                    tgt_key_padding_mask=tgt_key_padding_mask,
+                    memory_key_padding_mask=memory_key_padding_mask)
                 repeated_tgt_pred = repeated_tgt_pred.transpose(0, 1)
-                enc_self_attns, dec_self_attns, enc_dec_attns = None, None, None
+                # enc_self_attns, dec_self_attns, enc_dec_attns = None, None, None
             else:
                 repeated_tgt_pred, enc_self_attns, dec_self_attns, enc_dec_attns = model.forward(repeated_src_batch, tgt_batch_)
 
@@ -205,7 +207,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--using_nn_transformer',
         type=bool,
-        default=False)
+        default=True)
 
     parser.add_argument(
         '--nn_helper',
