@@ -5,10 +5,11 @@ import torch
 import torch.nn as nn
 import pickle
 import matplotlib.pylab as plt
+import viz
 
 from dataset.dataloader import load_data, get_loader
 from dataset.field import Vocab
-from utils import seq2sen, plot_loss, fix_seed, showAttention
+from utils import seq2sen2, plot_loss, fix_seed, showAttention  #, att_animation
 from Transformer import Transformer, Encoder, Decoder, PositionalEmbedding, EmbeddingBack
 from torch.autograd import Variable
 from tqdm import tqdm
@@ -109,10 +110,10 @@ def main(args):
             repeated_tgt_pred = embedding_back.forward(repeated_tgt_pred)
             repeated_pred_label = torch.max(repeated_tgt_pred, 1)[1].view(batch_size, -1)
             print("\n")
-            src_label_list = seq2sen(original_src_batch, src_vocab, pad_idx)
-            repeated_src_label_list = seq2sen(original_repeated_src_batch, src_vocab, pad_idx)
-            pred_label_list = seq2sen(repeated_pred_label.tolist(), tgt_vocab, pad_idx)
-            tgt_label_list = seq2sen(original_tgt_batch, tgt_vocab, pad_idx)
+            src_label_list = seq2sen2(original_src_batch, src_vocab, pad_idx)
+            repeated_src_label_list = seq2sen2(original_repeated_src_batch, src_vocab, pad_idx)
+            pred_label_list = seq2sen2(repeated_pred_label.tolist(), tgt_vocab, pad_idx)
+            tgt_label_list = seq2sen2(original_tgt_batch, tgt_vocab, pad_idx)
             for j in range(len(pred_label_list)):
                 src_label = src_label_list[j]
                 repeated_src_label = repeated_src_label_list[j]
@@ -130,12 +131,22 @@ def main(args):
                 print("Pred Label, {} epoch : ".format(j), pred_label)
                 print("Truth target Label, {} epoch : ".format(j), tgt_label)
 
-                enc_self_attn = enc_self_attns[1][j, 0, :, :]
-                enc_dec_attn = enc_dec_attns[0][j, 0, :, :]
-                # showAttention(repeated_src_label, repeated_src_label, enc_self_attn, repeat_range, j)
-                showAttention(repeated_src_label, repeated_src_label, enc_dec_attn, repeat_range, j)
+                if repeat_range == -1:
+                    repeat_range = 1
+                for k in range(6):
+                    enc_self_attn = enc_self_attns[k][j, 0, :, :]
+                    enc_dec_attn = enc_dec_attns[k][j, 0, :, :]
+                    dec_self_attn = dec_self_attns[k][j, 0, :, :]
+                    enc_fig_name = '{}th_enc_self_att(repeat : {})'.format(k+1, repeat_range)
+                    ed_fig_name = '{}th_enc_dec_att(repeat : {})'.format(k+1, repeat_range)
+                    dec_fig_name = '{}th_dec_self_att(repeat : {})'.format(k+1, repeat_range)
+                    showAttention(repeated_src_label, repeated_src_label, enc_self_attn, repeat_range, j, enc_fig_name, title_pos=(0.5, -0.1))
+                    showAttention(repeated_src_label, tgt_label, enc_dec_attn, repeat_range, j, ed_fig_name, title_pos=(0.5, -0.1))
+                    showAttention(tgt_label, tgt_label, dec_self_attn, repeat_range, j, dec_fig_name, title_pos=(0.5, -0.1))
 
-                if j >= 2:
+                # att_animation(enc_dec_attn, repeated_src_label, tgt_label, 0, 0)
+
+                if j >= 0:
                     break
             break
 

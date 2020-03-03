@@ -27,6 +27,20 @@ def seq2sen(batch, vocab, pad_idx):
     return sen_list
 
 
+def seq2sen2(batch, vocab, pad_idx):
+    sen_list = []
+
+    for seq in batch:
+        if pad_idx in seq:
+            seq_strip = seq[:seq.index(pad_idx)+1]
+        else:
+            seq_strip = seq
+        sen = ' '.join([vocab.itow(token) for token in seq_strip[:-1]])
+        sen_list.append(sen)
+
+    return sen_list
+
+
 def shuffle_list(src, tgt):
     index = list(range(len(src)))
     random.shuffle(index)
@@ -55,14 +69,15 @@ def plot_loss(train_loss, valid_loss, epochs, saved_plot_path):
     plt.savefig(saved_plot_path)
 
 
-def showAttention(input_sentence, output_words, attentions, repeat_range, iters):
+def showAttention(input_sentence, output_words, attentions, repeat_range, iters, fig_name, title_pos):
     """
     Reference :: https://9bow.github.io/PyTorch-tutorials-kr-0.3.1/intermediate/seq2seq_translation_tutorial.html
     """
     input_sentence = input_sentence.split(' ')
     output_words = output_words.split(' ')
     attentions = attentions.cpu().detach().numpy()
-    attentions = attentions[:len(input_sentence), :len(output_words)+1]
+    attentions = attentions[:len(output_words), :len(input_sentence)+1]
+    # attentions = attentions[:len(input_sentence), :len(output_words)+1]
 
     # colorbar로 그림 설정
     fig = plt.figure()
@@ -78,16 +93,38 @@ def showAttention(input_sentence, output_words, attentions, repeat_range, iters)
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
     ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
 
-    # plt.title('transformer, multi30k(repeat : {}) on {} th data'.format(repeat_range, iters))
+    plt.title(fig_name, position=title_pos)
 
-    plt.show()
+    # plt.savefig('att_figs/' + fig_name)
+    # plt.show()
 
 
-# def evaluateAndShowAttention(input_sentence):
-#     output_words, attentions = evaluate(
-#         encoder1, attn_decoder1, input_sentence)
-#     print('input =', input_sentence)
-#     print('output =', ' '.join(output_words))
-#     showAttention(input_sentence, output_words, attentions)
+# def att_animation(maps_array, src, tgt, layer_id, head_id):
+#     # weights = [maps[mode2id[mode]][head_id] for maps in maps_array]
+#     fig, axes = plt.subplots(1, 1)
+#
+#     def weight_animate(i):
+#         global colorbar
+#         if colorbar:
+#             colorbar.remove()
+#         plt.cla()
+#         axes[0].set_title('heatmap')
+#         axes[0].set_yticks(np.arange(len(src)))
+#         axes[0].set_xticks(np.arange(len(tgt)))
+#         axes[0].set_yticklabels(src)
+#         axes[0].set_xticklabels(tgt)
+#         plt.setp(axes[0].get_xticklabels(), rotation=45, ha="right",
+#                  rotation_mode="anchor")
+#
+#         fig.suptitle('epoch {}'.format(i))
+#         weight = weights[i].transpose(-1, -2)
+#         heatmap = axes[0].pcolor(weight, vmin=0, vmax=1, cmap=plt.cm.Blues)
+#         colorbar = plt.colorbar(heatmap, ax=axes[0], fraction=0.046, pad=0.04)
+#         axes[0].set_aspect('equal')
+#         axes[1].axis("off")
+#         graph_att_head(src, tgt, weight, axes[1], 'graph')
+#
+#     ani = animation.FuncAnimation(fig, weight_animate, frames=len(weights), interval=500, repeat_delay=2000)
+#     return ani
 
 
