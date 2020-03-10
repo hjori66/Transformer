@@ -58,7 +58,7 @@ class nnTransformer(Module):
             decoder_norm = LayerNorm(d_model)
             self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
 
-        self._reset_parameters()
+        # self._reset_parameters()
 
         self.d_model = d_model
         self.nhead = nhead
@@ -238,6 +238,7 @@ class TransformerDecoder(Module):
             output = self.norm(output)
 
         return output, dec_self_attns, enc_dec_attns
+
 
 class TransformerEncoderLayer(Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.

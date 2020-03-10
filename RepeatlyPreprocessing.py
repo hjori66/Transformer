@@ -14,7 +14,7 @@ Idea: Make NMT tasks with modified inputs like ASR inputs (randomly repeated wor
 """
 
 
-def repeat_word(seq, num_repeat_words, repeat_range):
+def repeat_word(seq, num_repeat_words, repeat_range, isnoise=False):
     new_seq = []
     if num_repeat_words is None:
         num_repeat_words = []
@@ -27,10 +27,10 @@ def repeat_word(seq, num_repeat_words, repeat_range):
             for _ in range(num):
                 new_seq.append(word)
 
-            # # (5?) Insert Epsilon Randomly
-            # if np.random.random() < 0.2:
-            #     for _ in range(np.random.randint(8)+1):
-            #         new_seq.append(3)
+            # (5?) Insert Epsilon Randomly
+            if isnoise and repeat_range > 1 and np.random.random() < 0.2:
+                for _ in range(np.random.randint(repeat_range)+1):
+                    new_seq.append(3)
 
     else:
         for i, word in enumerate(seq):
@@ -41,7 +41,7 @@ def repeat_word(seq, num_repeat_words, repeat_range):
     return new_seq, len(new_seq), num_repeat_words
 
 
-def repeat_input_words(src_batch, num_repeat_words, repeat_range):
+def repeat_input_words(src_batch, num_repeat_words, repeat_range, isnoise=False):
     # Do preprocessing #1
     if num_repeat_words == -1:
         num_repeat_words = None
@@ -52,9 +52,9 @@ def repeat_input_words(src_batch, num_repeat_words, repeat_range):
         seq.append(2)
         seq_strip = seq[:seq.index(2)]
         if num_repeat_words is None:
-            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words, repeat_range)
+            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words, repeat_range, isnoise)
         else:
-            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words[i], repeat_range)
+            new_seq, new_len, num_repeat_word = repeat_word(seq_strip, num_repeat_words[i], repeat_range, isnoise)
         new_seqs.append(new_seq)
         num_repeat_words_list.append(num_repeat_word)
         if max_len < new_len:

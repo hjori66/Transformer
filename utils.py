@@ -95,7 +95,7 @@ def showAttention(input_sentence, output_words, attentions, repeat_range, iters,
 
     plt.title(fig_name, position=title_pos)
 
-    # plt.savefig('att_figs/' + fig_name)
+    plt.savefig('att_figs/' + fig_name)
     # plt.show()
 
 
