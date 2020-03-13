@@ -5,7 +5,7 @@ from torch.nn import functional as F
 from torch.nn.modules.module import Module
 from torch.nn.modules.activation import MultiheadAttention
 from torch.nn.modules.container import ModuleList
-from torch.nn.init import xavier_uniform_
+from torch.nn.init import xavier_uniform_, xavier_normal_, kaiming_uniform_, kaiming_normal_
 from torch.nn.modules.dropout import Dropout
 from torch.nn.modules.linear import Linear
 from torch.nn.modules.normalization import LayerNorm
@@ -59,6 +59,9 @@ class nnTransformer(Module):
             self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
 
         # self._reset_parameters()
+        # self._reset_parameters_normal()
+        # self._reset_parameters_kaming(nonlinearity=activation)
+        self._reset_parameters_kaming_normal(nonlinearity=activation)
 
         self.d_model = d_model
         self.nhead = nhead
@@ -136,6 +139,27 @@ class nnTransformer(Module):
         for p in self.parameters():
             if p.dim() > 1:
                 xavier_uniform_(p)
+
+    def _reset_parameters_normal(self):
+        r"""Initiate parameters in the transformer model."""
+
+        for p in self.parameters():
+            if p.dim() > 1:
+                xavier_normal_(p)
+
+    def _reset_parameters_kaming(self, nonlinearity='leaky_relu'):
+        r"""Initiate parameters in the transformer model."""
+
+        for p in self.parameters():
+            if p.dim() > 1:
+                kaiming_uniform_(p, nonlinearity=nonlinearity)
+
+    def _reset_parameters_kaming_normal(self, nonlinearity='leaky_relu'):
+        r"""Initiate parameters in the transformer model."""
+
+        for p in self.parameters():
+            if p.dim() > 1:
+                kaiming_normal_(p, nonlinearity=nonlinearity)
 
 
 class TransformerEncoder(Module):
@@ -378,8 +402,16 @@ def _get_clones(module, N):
 
 def _get_activation_fn(activation):
     if activation == "relu":
+        print("activation :: relu")
         return F.relu
     elif activation == "gelu":
+        print("activation :: gelu")
         return F.gelu
+    elif activation == "sigmoid":
+        print("activation :: sigmoid")
+        return torch.sigmoid
+    elif activation == "tanh":
+        print("activation :: tanh")
+        return torch.tanh
     else:
         raise RuntimeError("activation should be relu/gelu, not %s." % activation)

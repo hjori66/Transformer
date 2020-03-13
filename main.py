@@ -62,6 +62,8 @@ def main(args):
     tgt_embedding.to(device)
     embedding_back.to(device)
 
+    activation = args.activation
+
     """
     Make the model
     """
@@ -72,7 +74,7 @@ def main(args):
         use_nn = False
 
     if use_nn:
-        model = nn_transformer.nnTransformer()
+        model = nn_transformer.nnTransformer(activation=activation)
     else:
         # custom_encoder = Encoder(embedding_size, num_hidden, num_head, num_block, kernel_size, 0.1)
         # custom_decoder = Decoder(embedding_size, num_hidden, num_head, num_head, num_block, kernel_size, 0.1)
@@ -398,7 +400,7 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--model_name',
-        default='transformer_no_xavier_init')
+        default='transformer_kaming_normal')
 
     parser.add_argument(
         '--kernel_size',
@@ -439,6 +441,11 @@ if __name__ == '__main__':
         '--repeat_range',
         type=int,
         default=4)
+
+    parser.add_argument(
+        '--activation',
+        type=str,
+        default='relu')
 
     args = parser.parse_args()
     main(args)
